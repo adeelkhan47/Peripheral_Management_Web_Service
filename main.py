@@ -1,26 +1,20 @@
-# Peripheral_Management_Web_Service
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import usb.core
 import usb.util
+from escpos.printer import Usb
 
-app = FastAPI(title="Peripheral Management Service")
+from fastapi import FastAPI, HTTPException
 
-# Configuration storage for printer and scale
+app = FastAPI(title="Local Peripheral Management Service", description="A service to manage a local 80mm POS printer, a 4x6 label printer, and a USB postal scale.")
+
+# Global configuration dictionary for devices
 config = {
-    "printer": {
-        "type": "80mm",  # Default printer type
-        "copies": 1,  # Default number of copies
-        "orientation": "portrait"  # Default orientation
-    },
-    "scale": {
-        "vendorId": None,  # USB vendor ID for the scale (hex string)
-        "productId": None,  # USB product ID for the scale (hex string)
-        "unit": "grams"  # Default unit for scale (grams or ounces)
-    }
+    "printer": {"vendorId": "0xXXXX", "productId": "0xYYYY", "copies": 1},
+    "scale": {"vendorId": "0xAAAA", "productId": "0xBBBB", "unit": "grams"}
 }
 
-
+# Pydantic models for request validation
 class PrintRequest(BaseModel):
     printerType: str
     content: str
@@ -29,90 +23,45 @@ class PrintRequest(BaseModel):
 class ScaleCommand(BaseModel):
     command: str
 
-# Model for printer configuration
-class PrinterConfig(BaseModel):
-    type: str = "80mm"
-    copies: int = 1
-    orientation: str = "portrait"
-
-# Model for scale configuration
-class ScaleConfig(BaseModel):
-    vendorId: str  # USB vendor ID for the scale in hex format (e.g., '0x1234')
-    productId: str  # USB product ID for the scale in hex format (e.g., '0x5678')
-    unit: str = "grams"  # Default unit for weight ('grams' or 'ounces')
-
-# Model for configure request
 class ConfigurationRequest(BaseModel):
-    printer: PrinterConfig
-    scale: ScaleConfig
+    printer: dict
+    scale: dict
 
+# Endpoint to print on the configured printer
+@app.post("/print")
+async def print_document(print_request: PrintRequest):
+    """
+    Endpoint to handle print requests.
+    """
+    global config
+    printer_type = print_request.printerType
+
+    # Use configured vendor/product IDs to interact with the printer
+    vendor_id = int(config['printer']['vendorId'], 16)
+    product_id = int(config['printer']['productId'], 16)
+
+    # Initialize printer (using python-escpos for USB printers)
+    try:
+        printer = Usb(vendor_id, product_id)
+        printer.text(print_request.content + "\n")
+        printer.cut()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Printer error: {str(e)}")
+
+    return {"message": "Print job completed successfully"}
+
+# Endpoint to configure the printer and scale
 @app.post("/configure")
 async def configure_devices(config_request: ConfigurationRequest):
     """
-    Endpoint to update the configuration for both the printer and USB scale.
+    Endpoint to configure printer and scale settings.
     """
     global config
-    # Update printer configuration
-    config['printer'].update(config_request.printer)
-
-    # Update scale configuration
-    config['scale'].update(config_request.scale)
-
-    # Check if the USB scale exists based on updated vendor and product IDs
-    if config['scale']['vendorId'] and config['scale']['productId']:
-        dev = usb.core.find(idVendor=int(config['scale']['vendorId'], 16),
-                            idProduct=int(config['scale']['productId'], 16))
-        if dev is None:
-            raise HTTPException(status_code=400, detail="USB scale not found.")
-
+    config['printer'] = config_request.printer
+    config['scale'] = config_request.scale
     return {"message": "Configuration updated successfully"}
 
-
-@app.post("/print")
-async def print_document(print_request: PrintRequest):
-    global printer
-    if printer is None:
-        raise HTTPException(status_code=400, detail="Printer not configured.")
-
-    printer_type = print_request.printerType or config['printer']['type']
-    copies = print_request.options.get('copies', config['printer']['copies'])
-    orientation = print_request.options.get('orientation', config['printer']['orientation'])
-
-    # Print the content for the specified number of copies
-    for _ in range(copies):
-        printer.text(print_request.content + "\n")
-        printer.cut()  # Cut the paper after printing
-
-    return {"jobID": "12345"}
-
-
-@app.get("/status")
-async def get_status():
-    """
-    Endpoint to return the status of the printers and scale.
-    """
-    global config
-    # Simulated printer and scale statuses (replace with actual hardware checks)
-    printers_status = [
-        {
-            "type": config['printer']['type'],
-            "status": "ready",
-            "errorMessage": None
-        }
-    ]
-
-    scale_status = {
-        "status": "ready",
-        "errorMessage": None,
-        "weight": 0.0  # Default weight (replace with actual scale reading)
-    }
-
-    return {
-        "printers": printers_status,
-        "scale": scale_status
-    }
-
-
+# Endpoint to handle scale commands
 @app.post("/scale")
 async def handle_scale(scale_command: ScaleCommand):
     """
@@ -139,7 +88,7 @@ async def handle_scale(scale_command: ScaleCommand):
     else:
         raise HTTPException(status_code=400, detail="Invalid scale command.")
 
-
+# Error reporting endpoint (can be extended for actual remote reporting)
 @app.post("/error-report")
 async def error_report():
     """
@@ -148,8 +97,45 @@ async def error_report():
     # Implement error reporting logic here (for printers or scales)
     return {"message": "Error reported successfully"}
 
-# Run FastAPI app
+# Example health check or status endpoint
+@app.get("/status")
+async def status():
+    """
+    Endpoint to check the actual status of the printer.
+    """
+    global config
+    printer_status = "Unknown"
+    scale_status = "Unknown"
+
+    try:
+        # Use configured vendor/product IDs to interact with the printer
+        vendor_id = int(config['printer']['vendorId'], 16)
+        product_id = int(config['printer']['productId'], 16)
+
+        # Initialize the USB printer
+        printer = Usb(vendor_id, product_id)
+
+        # Check printer status using a direct call (DLE EOT status command may vary)
+        status = printer.device.get_status()  # This is just a placeholder
+
+        # Based on the response, interpret the status
+        if status & 0x18 == 0x18:
+            printer_status = "Paper End"
+        elif status & 0x08 == 0x08:
+            printer_status = "Paper Low"
+        else:
+            printer_status = "Ready"
+    except usb.core.USBError as usb_err:
+        raise HTTPException(status_code=500, detail=f"USB Error: {str(usb_err)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking printer status: {str(e)}")
+
+    return {
+        "printer": {"type": "POS", "status": printer_status},
+        "scale": {"status": scale_status}  # You can implement similar status for scale here
+    }
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
