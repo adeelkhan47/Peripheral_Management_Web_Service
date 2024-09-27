@@ -17,8 +17,10 @@ config = {
     "printer": {"vendorId": "0x2730", "productId": "0x2002", "copies": 1},
     "scale": {"vendorId": "0xAAAA", "productId": "0xBBBB", "unit": "grams"}
 }
+vendor_id = int(config['printer']['vendorId'], 16)
+product_id = int(config['printer']['productId'], 16)
 
-dev = usb.core.find(idVendor=0x0fe6, idProduct=0x811e)
+dev = usb.core.find(vendor_id, product_id)
 
 if dev is None:
     raise ValueError("Device not found")
