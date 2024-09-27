@@ -14,6 +14,18 @@ config = {
     "scale": {"vendorId": "0xAAAA", "productId": "0xBBBB", "unit": "grams"}
 }
 
+dev = usb.core.find(idVendor=0x0fe6, idProduct=0x811e)
+
+if dev is None:
+    raise ValueError("Device not found")
+
+# Print out details of the USB device
+for cfg in dev:
+    print("Configuration Value:", cfg.bConfigurationValue)
+    for intf in cfg:
+        print("Interface Number:", intf.bInterfaceNumber, intf.bAlternateSetting)
+        for ep in intf:
+            print("Endpoint Address:", ep.bEndpointAddress)
 # Pydantic models for request validation
 class PrintRequest(BaseModel):
     printerType: str
@@ -42,7 +54,7 @@ async def print_document(print_request: PrintRequest):
 
     # Initialize printer (using python-escpos for USB printers)
     try:
-        printer = Usb(vendor_id, product_id)
+        printer = Usb(0x0fe6,0x811e)
         printer.text(print_request.content + "\n")
         printer.cut()
     except Exception as e:
