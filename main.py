@@ -69,6 +69,8 @@ async def print_document(print_request: PrintRequest):
 
     try:
         # Set the active configuration. With no arguments, the first configuration will be the active one
+        if dev.is_kernel_driver_active(0):
+            dev.detach_kernel_driver(0)
         dev.set_configuration()
 
         # Find the output endpoint (typically the second endpoint)
