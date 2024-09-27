@@ -14,7 +14,7 @@ app = FastAPI(title="Local Peripheral Management Service", description="A servic
 
 # Global configuration dictionary for devices
 config = {
-    "printer": {"vendorId": "0x0fe6", "productId": "0x811e", "copies": 1},
+    "printer": {"vendorId": "0x2730", "productId": "0x2002", "copies": 1},
     "scale": {"vendorId": "0xAAAA", "productId": "0xBBBB", "unit": "grams"}
 }
 
