@@ -24,15 +24,15 @@ dev = usb.core.find(0x2730, 0x2002)
 
 if dev is None:
     raise ValueError("Device not found")
-
-# Print out details of the USB device
-for cfg in dev:
-    print("Configuration Value:", cfg.bConfigurationValue)
-    for intf in cfg:
-        print("Interface Number:", intf.bInterfaceNumber, intf.bAlternateSetting)
-        for ep in intf:
-            print("Endpoint Address:", ep.bEndpointAddress)
-# Pydantic models for request validation
+#
+# # Print out details of the USB device
+# for cfg in dev:
+#     print("Configuration Value:", cfg.bConfigurationValue)
+#     for intf in cfg:
+#         print("Interface Number:", intf.bInterfaceNumber, intf.bAlternateSetting)
+#         for ep in intf:
+#             print("Endpoint Address:", ep.bEndpointAddress)
+# # Pydantic models for request validation
 
 class ScaleCommand(BaseModel):
     command: str
