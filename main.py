@@ -20,7 +20,7 @@ config = {
 vendor_id = int(config['printer']['vendorId'], 16)
 product_id = int(config['printer']['productId'], 16)
 
-dev = usb.core.find(vendor_id, product_id)
+dev = usb.core.find(0x2730, 0x2002)
 
 if dev is None:
     raise ValueError("Device not found")
