@@ -76,7 +76,6 @@ async def print_document(print_request: PrintRequest):
 
         # Send the content to the printer (raw bytes data)
         content_to_print = (print_request.content + "\n").encode('utf-8')
-
         dev.write(endpoint_out, content_to_print)
 
         return {"message": "Print job completed successfully"}
@@ -84,7 +83,10 @@ async def print_document(print_request: PrintRequest):
         raise HTTPException(status_code=500, detail=f"USB Error: {str(usb_err)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Printer error: {str(e)}")
-
+    finally:
+        # Release the USB device to avoid resource busy error
+        dev.reset()
+        usb.util.dispose_resources(dev)
 # Endpoint to configure the printer and scale
 @app.post("/configure")
 async def configure_devices(config_request: ConfigurationRequest):
