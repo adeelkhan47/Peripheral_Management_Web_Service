@@ -3,6 +3,10 @@ from pydantic import BaseModel
 import usb.core
 import usb.util
 from escpos.printer import Usb
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import usb.core
+import usb.util
 
 from fastapi import FastAPI, HTTPException
 
@@ -27,10 +31,6 @@ for cfg in dev:
         for ep in intf:
             print("Endpoint Address:", ep.bEndpointAddress)
 # Pydantic models for request validation
-class PrintRequest(BaseModel):
-    printerType: str
-    content: str
-    options: dict
 
 class ScaleCommand(BaseModel):
     command: str
@@ -40,6 +40,13 @@ class ConfigurationRequest(BaseModel):
     scale: dict
 
 # Endpoint to print on the configured printer
+# Pydantic model for print request
+class PrintRequest(BaseModel):
+    printerType: str
+    content: str
+    options: dict
+
+
 @app.post("/print")
 async def print_document(print_request: PrintRequest):
     """
@@ -52,15 +59,29 @@ async def print_document(print_request: PrintRequest):
     vendor_id = int(config['printer']['vendorId'], 16)
     product_id = int(config['printer']['productId'], 16)
 
-    # Initialize printer (using python-escpos for USB printers)
+    # Initialize the USB device using vendorId and productId
+    dev = usb.core.find(idVendor=vendor_id, idProduct=product_id)
+
+    if dev is None:
+        raise HTTPException(status_code=500, detail="Printer not found.")
+
     try:
-        printer = Usb(0x0fe6,0x811e)
-        printer.text(print_request.content + "\n")
-        printer.cut()
+        # Set the active configuration. With no arguments, the first configuration will be the active one
+        dev.set_configuration()
+
+        # Find the output endpoint (typically the second endpoint)
+        endpoint_out = dev[0][(0, 0)][1].bEndpointAddress  # Assumes first interface, alternate setting 0, endpoint 1
+
+        # Send the content to the printer (raw bytes data)
+        content_to_print = (print_request.content + "\n").encode('utf-8')
+
+        dev.write(endpoint_out, content_to_print)
+
+        return {"message": "Print job completed successfully"}
+    except usb.core.USBError as usb_err:
+        raise HTTPException(status_code=500, detail=f"USB Error: {str(usb_err)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Printer error: {str(e)}")
-
-    return {"message": "Print job completed successfully"}
 
 # Endpoint to configure the printer and scale
 @app.post("/configure")
